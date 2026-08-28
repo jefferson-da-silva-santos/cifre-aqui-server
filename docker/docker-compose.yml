@@ -1,0 +1,31 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "3000:3000"
+      - "9464:9464"
+    env_file: ../.env
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    volumes:
+      - pdfs:/app/storage/pdfs
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-app_password}
+      POSTGRES_DB: cifreaqui_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Em produção real: usar Neon gerenciado (DATABASE_URL), este serviço serve
+    # apenas para desenvolvimento local sem depender de rede externa.
+
+volumes:
+  pgdata:
+  pdfs:

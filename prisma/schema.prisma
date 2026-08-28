@@ -1,0 +1,223 @@
+// ==============================================================
+// CifreAqui — schema.prisma
+// Modelo de dados alinhado ao README de produto (pay-per-uso).
+// Cifras são armazenadas como JSON estruturado (não texto bruto),
+// exatamente como especificado na seção 10 do documento de produto.
+// ==============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StatusCifra {
+  rascunho
+  pago
+}
+
+// Papel do usuário — ADMIN tem exportação ilimitada sem cobrança (decisão
+// SEMPRE aplicada no backend; o frontend só reflete isso na UI, nunca decide).
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Instrumento {
+  violao
+  guitarra
+  ukulele
+  baixo
+  teclado
+}
+
+enum TipoPagamento {
+  criacao
+  edicao
+}
+
+enum StatusPagamento {
+  pending
+  approved
+  rejected
+}
+
+enum MetodoPagamento {
+  PIX
+  CREDIT_CARD
+  DEBIT_CARD
+  BOLETO
+  ACCOUNT_MONEY
+}
+
+model Usuario {
+  id                    String   @id @default(uuid())
+  nome                  String
+  email                 String   @unique
+  senhaHash             String
+  role                  Role     @default(USER)
+  nomeExibicaoPadrao    String?
+  logoUrlPadrao         String?
+  redesSociaisPadrao    Json?
+  preferenciasPdfPadrao Json?    // tema, template, destaque de acordes etc. (seção 9)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  cifras             Cifra[]
+  acordesCustomizados AcordeCustomizado[]
+  pagamentos         Pagamento[]
+  refreshTokens      RefreshToken[]
+
+  @@index([email])
+  @@map("usuarios")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  usuarioId String
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([usuarioId])
+  @@map("refresh_tokens")
+}
+
+model Cifra {
+  id        String      @id @default(uuid())
+  usuarioId String
+  usuario   Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  titulo      String
+  artista     String?
+  tom         String // ex: "C", "Am"
+  instrumento Instrumento @default(violao)
+  status      StatusCifra @default(rascunho)
+
+  // Estrutura completa em blocos (letra + acordes + linha de ritmo + anotações + dinâmica)
+  // Formato: [{ id, tipo, dinamica, linhas:[{letra, acordes:[{posicao,nome}], linhaRitmo}], anotacoes:[...] }]
+  blocos Json
+
+  acordesCustomizadosUsados String[] @default([]) // ids de AcordeCustomizado
+
+  configuracaoPdf Json // { template, colunas, orientacao, mostrarDiagramas, mostrarLegendaDinamica, logoUrl, ... }
+
+  // Cópia integral do "estado cobrável" (tom + blocos + config de conteúdo) no momento
+  // do último pagamento aprovado — usada pelo DiffService para decidir cobrança (seção 11.2)
+  versaoPagaSnapshot Json?
+
+  criadoEm    DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  pagamentos Pagamento[]
+  itensApostila ApostilaItem[]
+
+  @@index([usuarioId])
+  @@index([status])
+  @@map("cifras")
+}
+
+model AcordeCustomizado {
+  id                  String      @id @default(uuid())
+  usuarioId           String
+  usuario             Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  nomeExibicao        String
+  nomeAcordeVinculado String?
+  instrumento         Instrumento
+  frets               Int[]
+  fingers             Int[]
+  barres              Int[]       @default([])
+  capo                Boolean     @default(false)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([usuarioId])
+  @@map("acordes_customizados")
+}
+
+model Pagamento {
+  id                  String          @id @default(uuid())
+  cifraId             String
+  cifra               Cifra           @relation(fields: [cifraId], references: [id], onDelete: Cascade)
+  usuarioId           String
+  usuario             Usuario         @relation(fields: [usuarioId], references: [id])
+  tipo                TipoPagamento
+  valor               Decimal         @db.Decimal(10, 2)
+  metodo              MetodoPagamento?
+  status              StatusPagamento @default(pending)
+  externalReference   String          @unique
+  providerPaymentId   String?         // id retornado pelo payment-system-mp
+  // Snapshot do estado da cifra no instante em que o pagamento foi criado — usado para
+  // gerar o PDF correto mesmo se o usuário editar a cifra enquanto o pagamento está pending
+  // (seção 11.3 do produto)
+  snapshotNoMomentoDoPagamento Json
+  criadoEm            DateTime        @default(now())
+  aprovadoEm          DateTime?
+
+  apostila   Apostila? @relation(fields: [apostilaId], references: [id])
+  apostilaId String?
+
+  @@index([cifraId])
+  @@index([usuarioId])
+  @@index([status])
+  @@map("pagamentos")
+}
+
+// Agrupamento de várias cifras num único PDF (Modo Apostila — seção 8.4)
+model Apostila {
+  id          String   @id @default(uuid())
+  usuarioId   String
+  titulo      String
+  status      StatusPagamento @default(pending)
+  createdAt   DateTime @default(now())
+
+  itens      ApostilaItem[]
+  pagamentos Pagamento[]
+
+  @@index([usuarioId])
+  @@map("apostilas")
+}
+
+model ApostilaItem {
+  id         String   @id @default(uuid())
+  apostilaId String
+  apostila   Apostila @relation(fields: [apostilaId], references: [id], onDelete: Cascade)
+  cifraId    String
+  cifra      Cifra    @relation(fields: [cifraId], references: [id])
+  ordem      Int
+
+  @@index([apostilaId])
+  @@map("apostila_itens")
+}
+
+model WebhookEvent {
+  id         BigInt   @id @default(autoincrement())
+  providerEventId String? // idempotência — id do evento vindo do payment-system-mp, quando existir
+  payload    Json
+  processedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@unique([providerEventId])
+  @@map("webhook_events")
+}
+
+model AuditLog {
+  id        BigInt   @id @default(autoincrement())
+  event     String
+  entity    String?
+  entityId  String?
+  usuarioId String?
+  payload   Json?
+  ip        String?
+  requestId String?
+  createdAt DateTime @default(now())
+
+  @@index([event])
+  @@index([usuarioId])
+  @@map("audit_logs")
+}
