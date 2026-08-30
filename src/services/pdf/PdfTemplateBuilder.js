@@ -70,6 +70,33 @@ function renderizarLinha(linha, destaqueAcorde) {
   return html;
 }
 
+/**
+ * Linha de ritmo/contratempo.
+ *
+ * Forma unidade rigida com a letra (secao 4.4): as duas nunca sao separadas
+ * entre paginas, porque o ritmo sozinho no topo de uma folha nao diz nada.
+ */
+function renderizarLinhaRitmo(linhaRitmo) {
+  if (!linhaRitmo) return "";
+  return `<div class="linha-ritmo">${escapeHtml(linhaRitmo)}</div>`;
+}
+
+/**
+ * Observacoes gerais do hino, no pe da folha.
+ *
+ * Depois dos diagramas e fora do fluxo dos blocos: nao pertencem a nenhuma secao
+ * da musica. Quem toca le a cifra de cima a baixo e consulta isto uma vez, no
+ * comeco do ensaio.
+ */
+function renderizarObservacoes(observacoes) {
+  const texto = (observacoes ?? "").trim();
+  if (!texto) return "";
+  return `<div class="observacoes">
+    <div class="observacoes-rotulo">Observacoes</div>
+    <p class="observacoes-texto">${escapeHtml(texto)}</p>
+  </div>`;
+}
+
 function renderizarBloco(bloco, config) {
   const marcador = bloco.dinamica ? LEGENDA_DINAMICA[bloco.dinamica] : null;
   /*
