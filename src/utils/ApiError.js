@@ -33,4 +33,15 @@ export class ApiError extends Error {
   static internal(message = "Erro interno do servidor.") {
     return new ApiError(500, message);
   }
+
+  /**
+   * Falha de infraestrutura, não do pedido do cliente.
+   *
+   * Existe para separar "o servidor não conseguiu agora" de "o pedido está
+   * errado": 503 diz ao cliente que repetir faz sentido, e o 500 genérico não
+   * diz nada — além de arrastar o stack trace para a resposta.
+   */
+  static serviceUnavailable(message = "Serviço temporariamente indisponível.") {
+    return new ApiError(503, message);
+  }
 }

@@ -38,6 +38,22 @@ function renderizarLinhaRitmo(linhaRitmo) {
   return `<div class="linha-ritmo">${escapeHtml(linhaRitmo)}</div>`;
 }
 
+/**
+ * Observacoes gerais do hino, no pe da folha.
+ *
+ * Depois dos diagramas e fora do fluxo dos blocos: nao pertencem a nenhuma
+ * secao da musica. Quem toca le a cifra de cima a baixo e consulta isto uma vez,
+ * no comeco do ensaio.
+ */
+function renderizarObservacoes(observacoes) {
+  const texto = (observacoes ?? "").trim();
+  if (!texto) return "";
+  return `<div class="observacoes">
+    <div class="observacoes-rotulo">Observacoes</div>
+    <p class="observacoes-texto">${escapeHtml(texto)}</p>
+  </div>`;
+}
+
 function renderizarBloco(bloco, config) {
   const marcador = bloco.dinamica ? LEGENDA_DINAMICA[bloco.dinamica] : null;
   const estiloBorda = marcador ? `border-left: 5px solid ${marcador.cor};` : "";
@@ -51,6 +67,11 @@ function renderizarBloco(bloco, config) {
     html += `<div class="unidade-linha">`;
     html += renderizarLinhaRitmo(linha.linhaRitmo);
     html += renderizarLinha(linha, config.destaqueAcorde);
+    // A nota entra DENTRO da unidade rigida: separada da linha a que se refere,
+    // ela vira uma frase solta no topo da pagina seguinte, sem contexto nenhum.
+    if (linha.nota) {
+      html += `<div class="nota-linha">${escapeHtml(linha.nota)}</div>`;
+    }
     html += `</div>`;
   }
 
@@ -138,6 +159,13 @@ export function construirHtmlCifra(cifra, { diagramasSvg = {}, cabecalhoExtra = 
   .acorde--cor { color: var(--cor-acorde); }
   .acorde--sublinhado { text-decoration: underline; }
   .anotacao { font-style: italic; font-size: 10.5px; color: #777; margin-top: 2px; }
+  /* Nota de linha: discreta e recuada, para se ler como margem do caderno e
+     nao competir com a letra nem com os acordes. */
+  .nota-linha { font-size: 9.5px; font-style: italic; color: #8a8a8a; margin: 1px 0 4px 14px; }
+  /* Observacoes do hino: no pe da folha, depois de toda a cifra. */
+  .observacoes { break-inside: avoid; margin-top: 16px; padding-top: 8px; border-top: 1px solid #ddd; }
+  .observacoes-rotulo { font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; color: #999; }
+  .observacoes-texto { font-size: 10.5px; line-height: 1.5; color: #666; white-space: pre-wrap; margin: 3px 0 0; }
   .legenda-dinamica { break-inside: avoid; display:flex; flex-wrap:wrap; gap: 10px; font-size: 10px; margin-bottom: 12px; padding: 6px 8px; background:#fafafa; border-radius: 4px; }
   .legenda-item { display:flex; align-items:center; gap:4px; }
   .legenda-cor { width:9px; height:9px; border-radius:2px; display:inline-block; }
@@ -167,6 +195,7 @@ export function construirHtmlCifra(cifra, { diagramasSvg = {}, cabecalhoExtra = 
   <div class="conteudo">
     ${(cifra.blocos ?? []).map((b) => renderizarBloco(b, config)).join("")}
     ${config.mostrarDiagramas ? renderizarDiagramas(nomesAcordes, diagramasSvg) : ""}
+    ${renderizarObservacoes(cifra.observacoes)}
   </div>
 </body>
 </html>`;

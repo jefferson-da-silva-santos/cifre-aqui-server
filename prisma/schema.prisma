@@ -82,9 +82,15 @@ model RefreshToken {
   usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   revokedAt DateTime?
+  // Hash do token que substituiu este na rotação. Distingue retry legítimo de
+  // replay de token roubado: sem isso os dois casos são apenas "revogado", e
+  // toda chamada duplicada ao /auth/refresh encerrava as sessões do usuário.
+  replacedByTokenHash String?
   createdAt DateTime  @default(now())
 
   @@index([usuarioId])
+  @@index([replacedByTokenHash])
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }
 
@@ -102,6 +108,11 @@ model Cifra {
   // Estrutura completa em blocos (letra + acordes + linha de ritmo + anotações + dinâmica)
   // Formato: [{ id, tipo, dinamica, linhas:[{letra, acordes:[{posicao,nome}], linhaRitmo}], anotacoes:[...] }]
   blocos Json
+
+  // Observacoes gerais do hino (afinacao, capotraste, combinado do grupo).
+  // Coluna propria e nao um bloco: nao pertence a nenhuma secao da musica e
+  // sai no rodape da folha, depois de toda a cifra.
+  observacoes String?
 
   acordesCustomizadosUsados String[] @default([]) // ids de AcordeCustomizado
 

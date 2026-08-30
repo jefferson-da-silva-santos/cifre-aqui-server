@@ -61,7 +61,13 @@ export const schemaConfiguracaoPdf = z.object({
 
 export const schemaCreateCifra = z.object({
   titulo: z.string().min(1).max(150),
-  artista: z.string().max(150).optional(),
+  // Aceita null explicito: o cliente devolve a cifra inteira no autosave, e o
+  // GET entrega `artista: null` quando vazio. Recusar o proprio formato que a
+  // leitura produz obriga todo cliente a limpar o payload a mao — foi a origem
+  // do erro "artista: Expected string, received null".
+  artista: z.string().max(150).nullable().optional(),
+  // Observacoes gerais do hino: afinacao, capotraste, combinado do grupo.
+  observacoes: z.string().max(2000).nullable().optional(),
   tom: z.string().min(1).max(10),
   instrumento: z.enum(["violao", "guitarra", "ukulele", "baixo", "teclado"]).default("violao"),
   blocos: z.array(blocoSchema).default([]),

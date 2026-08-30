@@ -2,6 +2,7 @@ import puppeteer from "puppeteer";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { env } from "../../config/env.js";
+import { ApiError } from "../../utils/ApiError.js";
 import { logger } from "../../utils/logger.js";
 import { construirHtmlCifra, cabecalhoModoProfessor } from "./PdfTemplateBuilder.js";
 
@@ -13,14 +14,53 @@ export default class PdfService {
     this._browserPromise = null;
   }
 
-  // Reaproveita uma única instância do Chromium headless entre requisições —
-  // subir o browser é o passo mais caro do processo.
+  /**
+   * Reaproveita uma unica instancia do Chromium entre requisicoes - subir o
+   * browser e o passo mais caro do processo.
+   *
+   * Duas correcoes sobre a versao anterior:
+   *
+   * 1. A promessa e limpa quando o lancamento falha. Sem isso, a PRIMEIRA falha
+   *    ficava memorizada e toda exportacao seguinte rejeitava com o mesmo erro,
+   *    mesmo depois de o Chrome ser instalado - so reiniciar o servidor
+   *    resolvia. E por isso que o erro parecia permanente.
+   *
+   * 2. O "Could not find Chrome" vira uma mensagem que diz o que fazer. O erro
+   *    cru do Puppeteer e sobre cache de download, nao sobre o produto, e
+   *    chegava ao cliente como 500 com stack trace.
+   */
   async _getBrowser() {
     if (!this._browserPromise) {
-      this._browserPromise = puppeteer.launch({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      });
+      this._browserPromise = puppeteer
+        .launch({
+          headless: true,
+          // Vazio -> o binario que o proprio puppeteer baixou. Preenchido -> um
+          // Chrome ja instalado (imagem Docker enxuta, CI, Windows sem cache).
+          ...(env.PUPPETEER_EXECUTABLE_PATH
+            ? { executablePath: env.PUPPETEER_EXECUTABLE_PATH }
+            : {}),
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            // /dev/shm padrao do Docker tem 64MB e o Chrome trava ao estourar.
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+          ],
+        })
+        .catch((err) => {
+          this._browserPromise = null;
+          if (/Could not find Chrome|Failed to launch|ENOENT/i.test(err.message)) {
+            logger.error(
+              { err },
+              "Chromium ausente. Rode: npx puppeteer browsers install chrome - ou aponte " +
+                "PUPPETEER_EXECUTABLE_PATH para um Chrome ja instalado.",
+            );
+            throw ApiError.serviceUnavailable(
+        "O gerador de PDF esta indisponivel no servidor. Nenhuma cobranca foi feita - tente novamente em instantes.",
+            );
+          }
+          throw err;
+        });
     }
     return this._browserPromise;
   }
@@ -106,7 +146,20 @@ export default class PdfService {
 
   async _renderizarHtmlParaPdf(html, nomeBase) {
     const browser = await this._getBrowser();
-    const page = await browser.newPage();
+    let page;
+    try {
+      page = await browser.newPage();
+    } catch (err) {
+      // Browser morreu entre duas requisicoes (OOM, crash): descarta a instancia
+      // memorizada para que a proxima exportacao suba uma nova, em vez de repetir
+      // o mesmo erro para sempre.
+      this._browserPromise = null;
+      logger.error({ err }, "Instancia do Chromium indisponivel; sera recriada");
+      throw ApiError.serviceUnavailable(
+        "O gerador de PDF esta indisponivel no servidor. Nenhuma cobranca foi feita - tente novamente em instantes.",
+      );
+    }
+
     try {
       await page.setContent(html, { waitUntil: "networkidle0", timeout: env.PDF_TIMEOUT_MS });
       const buffer = await page.pdf({ printBackground: true, preferCSSPageSize: true });
@@ -121,7 +174,7 @@ export default class PdfService {
       logger.error({ err }, "Falha ao gerar PDF via Puppeteer");
       throw err;
     } finally {
-      await page.close();
+      await page.close().catch(() => {});
     }
   }
 
