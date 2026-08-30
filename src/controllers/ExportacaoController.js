@@ -84,7 +84,17 @@ export default class ExportacaoController {
       return ApiResponse.success(res, {
         message: "PDF gerado sem cobrança.",
         data: {
-          exportId: `gratuito-${randomUUID()}`,
+          /*
+           * `exportId: null` porque NAO EXISTE job para acompanhar: o PDF ja esta
+           * pronto e o link vem nesta mesma resposta.
+           *
+           * Antes daqui saia um `gratuito-<uuid>` inventado, e o frontend abria
+           * polling em GET /exports/gratuito-<uuid> — um id que nunca existiu como
+           * pagamento. Cada tentativa respondia 404 "Pagamento nao encontrado", e
+           * como o polling so para quando LE o status "concluido", o 404 impedia
+           * justamente a leitura que encerraria o laco. Dai o loop infinito.
+           */
+          exportId: null,
           status: "concluido",
           downloadUrl: buildDownloadUrl(resultado.pdf.fileName),
           pagamentoId: null,
