@@ -200,11 +200,15 @@ export function construirHtmlCifra(cifra, { diagramasSvg = {}, cabecalhoExtra = 
   .titulo-musica { font-size: 20px; font-weight: 700; margin: 0; }
   .artista { font-size: 13px; color: #666; margin: 2px 0 0; }
   .info-extra { font-size: 11px; color:#666; text-align:right; }
-  .conteudo { column-count: ${colunas}; column-gap: 24px; }
+  /* column-fill fica no padrao (balance), nao auto: com auto a coluna esquerda
+     enche ate o fim da pagina antes de passar para a direita, e numa cifra curta
+     isso deixa metade da folha vazia. Balanceado, as duas colunas ficam com a
+     mesma altura — cifra curta fica simetrica, cifra longa continua caindo na
+     direita, que e o objetivo de duas paginas em uma folha.
+     Nao se declara altura: em midia paginada a propria pagina e o fragmentainer,
+     e uma altura em mm brigaria com a margem da regra @page. */
+  .conteudo { column-count: ${colunas}; column-gap: 24px; ${colunas === 2 ? "column-rule: 1px solid #e3e3e3;" : ""} }
   .bloco { break-inside: avoid; margin-bottom: 14px; padding-left: 8px; }
-  /* Com dinamica o bloco vira uma caixa: precisa de respiro interno para o texto
-     nao encostar no contorno, e de raio para nao competir com a moldura da folha. */
-  .bloco--dinamica { padding: 8px 10px; border-radius: 5px; }
   /* Com dinamica o bloco vira uma caixa: precisa de respiro interno para o texto
      nao encostar no contorno, e de raio para nao competir com a moldura da folha. */
   .bloco--dinamica { padding: 8px 10px; border-radius: 5px; }
